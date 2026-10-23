@@ -21,8 +21,9 @@ def chunk_text(text, chunk_size=500, overlap=50):
 
         if i + chunk_size >= len(words):
             break
-
     return chunks
+
+    
 
 '''Following functions are for testing purposes only. They will be removed in the final version.
                                                                                         ~ Prabal
