@@ -6,9 +6,6 @@ load_dotenv()
 client = genai.Client()
 
 def get_embeddings(text_chunks):
-    """
-    Converts a list of text chunks into floating-point vectors in a single batch call.
-    """
     response = client.models.embed_content(
         model="gemini-embedding-001",
         contents=text_chunks
@@ -17,9 +14,6 @@ def get_embeddings(text_chunks):
     return [emb.values for emb in response.embeddings]
 
 def get_query_embedding(query):
-    """
-    Embeds the user's search query to compare against the database.
-    """
     response = client.models.embed_content(
         model="gemini-embedding-001",
         contents=query
@@ -27,10 +21,6 @@ def get_query_embedding(query):
     return response.embeddings[0].values
 
 def generate_answer(query, context_chunks):
-    """
-    Injects the retrieved chunks into a hardcoded prompt template 
-    and pings the LLM for the final synthesis.
-    """
     context_string = "\n\n---\n\n".join(context_chunks)
     
     prompt = f"""
