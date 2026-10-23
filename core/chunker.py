@@ -7,7 +7,6 @@ def extract_text_from_pdf(pdf_path):
         for page in reader.pages:
             page_text = page.extract_text()
             if page_text:
-                page_text = page.extract_text()
                 text += page_text.replace('\n', ' ') + " "
         return text
 
@@ -25,6 +24,9 @@ def chunk_text(text, chunk_size=500, overlap=50):
 
     return chunks
 
+'''Following functions are for testing purposes only. They will be removed in the final version.
+                                                                                        ~ Prabal
+'''
 if __name__ == "__main__":
     text = extract_text_from_pdf("sample.pdf")
     chunks = chunk_text(text)
