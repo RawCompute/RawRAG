@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![Google Gemini](https://img.shields.io/badge/Model-Gemini%202.5%20Flash-orange)](#)
 
-**RawRAG** is an industry-level, production-grade Retrieval-Augmented Generation (RAG) pipeline built from scratch under the **[RawCompute]** organization. 
+**RawRAG** is a production-grade Retrieval-Augmented Generation (RAG) pipeline built from scratch under the **[RawCompute]** organization. 
 
 **Our Philosophy:** Zero bloated orchestration wrappers (No LangChain, No LlamaIndex) and zero managed vector databases (No Pinecone, No ChromaDB). We build the infrastructure from first principles using pure Python, linear algebra via NumPy, and standard SQLite.
 
@@ -26,9 +26,9 @@ RawRAG/
 │   ├── gemini_client.py   # Model endpoints (google-genai SDK)
 │   └── vector_math.py     # NumPy matrix and cosine similarity engine
 ├── db/
-│   └── database.py        # SQLite mapping (Vector Index <-> Text Chunk) [WIP]
+│   └── database.py        # SQLite mapping (Vector Index <-> Text Chunk)
 ├── .env                   # Ignored via .gitignore 
-├── requirements.txt       # Dependencies
+├── pyproject.toml         # Dependency mapping for uv
 └── main.py                # FastAPI server and endpoints [WIP]
 ```
 
@@ -36,17 +36,29 @@ RawRAG/
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/RawCompute/RawRAG.git
+   git clone [https://github.com/RawCompute/RawRAG.git](https://github.com/RawCompute/RawRAG.git)
    cd RawRAG
    ```
 
-2. **Install dependencies:**
+2. **Configure the environment (using uv):**
    ```bash
-   pip install -r requirements.txt
-   ```
-   *(Required packages: `numpy`, `fastapi`, `uvicorn`, `google-genai`, `python-dotenv`, `PyPDF2`)*
+   # Initialize a fast uv virtual environment
+   uv venv
 
-3. **Configure the environment:**
+   # Activate the environment
+   # Linux/macOS:
+   source .venv/bin/activate
+   # Windows:
+   # .venv\Scripts\activate
+
+   # Sync dependencies directly
+   uv sync
+   
+   # Note: If you are strictly using the legacy requirements file instead of pyproject.toml, run:
+   # uv pip install -r requirements.txt
+   ```
+
+3. **Configure the API Key:**
    Create a `.env` file in the root directory and add your Google AI Studio key:
    ```env
    GEMINI_API_KEY=your_api_key_here
@@ -58,7 +70,7 @@ RawRAG/
 - [x] **Sliding-Window Chunker:** Completed and tested on complex PDFs.
 - [x] **Gemini API Integration:** Updated to the latest `google-genai` SDK, configured for 3072-dimensional vectors.
 - [x] **Vector Math Engine:** Custom NumPy `VectorDatabase` class built.
-- [ ] **SQLite Database (`db/database.py`):** Map NumPy row indices to raw text strings.
+- [x] **SQLite Database (`db/database.py`):** Map NumPy row indices to raw text strings.
 - [ ] **FastAPI Endpoints (`main.py`):** Hook up `/ingest` and `/query` routes.
 
 ## 📄 License
