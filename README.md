@@ -8,7 +8,7 @@
 
 **Our Philosophy:** Zero bloated orchestration wrappers (No LangChain, No LlamaIndex) and zero managed vector databases (No Pinecone, No ChromaDB). We build the infrastructure from first principles using pure Python, linear algebra via NumPy, and standard SQLite.
 
-## 🚀 Architecture Overview
+## Architecture Overview
 
 RawRAG is designed to process massive PDFs, chunk them intelligently, embed them into high-dimensional space, and retrieve exact context via manual cosine similarity calculations.
 
@@ -17,7 +17,7 @@ RawRAG is designed to process massive PDFs, chunk them intelligently, embed them
 3. **Vector Mathematics:** Maintains a global NumPy matrix (`np.vstack`) and executes manual dot-product cosine similarity searches (`np.argsort`) to find the top-k matches instantly.
 4. **LLM Synthesis:** Injects retrieved chunk text into a strict prompt template and generates grounded answers using `gemini-2.5-flash`.
 
-## 📂 Repository Structure
+## Repository Structure
 
 ```text
 RawRAG/
@@ -32,7 +32,7 @@ RawRAG/
 └── main.py                # FastAPI server and endpoints [WIP]
 ```
 
-## 🛠️ Installation & Setup
+## Installation & Setup
 
 1. **Clone the repository:**
    ```bash
@@ -65,7 +65,7 @@ RawRAG/
    ```
    *Note: `.env` is included in `.gitignore` to prevent credential leaks.*
 
-## 🛣️ Development Roadmap
+## Development Roadmap
 
 - [x] **Sliding-Window Chunker:** Completed and tested on complex PDFs.
 - [x] **Gemini API Integration:** Updated to the latest `google-genai` SDK, configured for 3072-dimensional vectors.
