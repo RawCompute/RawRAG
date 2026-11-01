@@ -7,30 +7,52 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import numpy as np
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
+load_dotenv()
+
+
 DIM = 3072  # every Gemini embedding has 3072 numbers
 
+# importing the actual functions and replacing the dummy functions
+from core.chunker import chunk_text, extract_text_from_pdf
+from core.gemini_client import generate_answer as core_generate_answer
+from core.gemini_client import get_embeddings as core_get_embeddings
 
-# ADAPT: replace these three with calls to your real code
+
 def chunk_pdf(path: str) -> list[dict]:
     if os.getenv("RAWRAG_FAKE") == "1":
         return [{"text": "fake chunk one", "page": 1},
                 {"text": "fake chunk two", "page": 2}]
-    raise NotImplementedError("Wire chunk_pdf to core/chunker.py")
+
+    text = extract_text_from_pdf(path)
+    chunks = chunk_text(text)
+    return [{"text": chunk, "page": 1} for chunk in chunks]
 
 
 def embed_texts(texts: list[str]) -> np.ndarray:
     if os.getenv("RAWRAG_FAKE") == "1":
         return np.random.rand(len(texts), DIM)
-    raise NotImplementedError("Wire embed_texts to core/gemini_client.py")
+
+    vectors = core_get_embeddings(texts)
+    return np.asarray(vectors, dtype=np.float32)
 
 
 def generate_answer(prompt: str) -> str:
     if os.getenv("RAWRAG_FAKE") == "1":
         return "FAKE ANSWER (no LLM was called)."
-    raise NotImplementedError("Wire generate_answer to core/gemini_client.py")
+
+    try:
+        context_block, question_block = prompt.split("\n\nQuestion: ", 1)
+        context_text = context_block.split("Context:\n", 1)[1].strip()
+        question = question_block.split("\n\nAnswer:", 1)[0].strip()
+        context_chunks = [part.strip() for part in context_text.split("\n\n") if part.strip()]
+    except ValueError:
+        return core_generate_answer(prompt, [])
+
+    return core_generate_answer(question, context_chunks)
 
 
 class VectorStoreAdapter:
@@ -83,6 +105,8 @@ CREATE TABLE IF NOT EXISTS chunks (
 
 store = VectorStoreAdapter()
 write_lock = threading.Lock()
+DEFAULT_HOST = os.getenv("HOST", "127.0.0.1")
+DEFAULT_PORT = int(os.getenv("PORT", "8000"))
 
 
 def connect() -> sqlite3.Connection:
@@ -246,3 +270,9 @@ def query(req: QueryRequest):
             for row_idx, page, text, filename in ordered
         ],
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("main:app", host=DEFAULT_HOST, port=DEFAULT_PORT)
