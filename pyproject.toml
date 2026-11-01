@@ -14,6 +14,7 @@ dependencies = [
     "google-generativeai>=0.8.6",
     "numpy>=2.5.4",
     "pypdf2>=3.0.1",
+    "python-dotenv>=1.2.4",
     "python-multipart>=0.0.32",
     "uvicorn>=0.54.0",
 ]
@@ -29,4 +30,5 @@ build-backend = "uv_build"
 dev = [
     "httpx>=0.28.1",
     "pytest>=9.2.0",
+    "reportlab>=5.1.0",
 ]

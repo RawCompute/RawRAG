@@ -13,46 +13,54 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
-
 DIM = 3072  # every Gemini embedding has 3072 numbers
-
-# importing the actual functions and replacing the dummy functions
-from core.chunker import chunk_text, extract_text_from_pdf
-from core.gemini_client import generate_answer as core_generate_answer
-from core.gemini_client import get_embeddings as core_get_embeddings
+EMBED_BATCH = 50  # chunks sent to Gemini per request
 
 
+def is_fake() -> bool:
+    return os.getenv("RAWRAG_FAKE") == "1"
+
+
+# The three functions below connect main.py to core/. With RAWRAG_FAKE=1 they
+# return fake data, so you can test without a Gemini key.
+# The core imports are inside the functions so that fake mode (and the tests)
+# work even when GEMINI_API_KEY is not set.
 def chunk_pdf(path: str) -> list[dict]:
-    if os.getenv("RAWRAG_FAKE") == "1":
+    if is_fake():
         return [{"text": "fake chunk one", "page": 1},
                 {"text": "fake chunk two", "page": 2}]
 
-    text = extract_text_from_pdf(path)
-    chunks = chunk_text(text)
-    return [{"text": chunk, "page": 1} for chunk in chunks]
+    import PyPDF2
+    from core.chunker import chunk_text
+
+    chunks = []
+    reader = PyPDF2.PdfReader(path)
+    for page_number, page in enumerate(reader.pages, start=1):
+        page_text = (page.extract_text() or "").replace("\n", " ")
+        for piece in chunk_text(page_text):
+            chunks.append({"text": piece, "page": page_number})
+    return chunks
 
 
 def embed_texts(texts: list[str]) -> np.ndarray:
-    if os.getenv("RAWRAG_FAKE") == "1":
+    if is_fake():
         return np.random.rand(len(texts), DIM)
 
-    vectors = core_get_embeddings(texts)
-    return np.asarray(vectors, dtype=np.float32)
+    from core.gemini_client import get_embeddings
+
+    vectors = []
+    for i in range(0, len(texts), EMBED_BATCH):
+        vectors.extend(get_embeddings(texts[i:i + EMBED_BATCH]))
+    return np.array(vectors, dtype=np.float32)
 
 
-def generate_answer(prompt: str) -> str:
-    if os.getenv("RAWRAG_FAKE") == "1":
+def generate_answer(query: str, context_chunks: list[str]) -> str:
+    if is_fake():
         return "FAKE ANSWER (no LLM was called)."
 
-    try:
-        context_block, question_block = prompt.split("\n\nQuestion: ", 1)
-        context_text = context_block.split("Context:\n", 1)[1].strip()
-        question = question_block.split("\n\nAnswer:", 1)[0].strip()
-        context_chunks = [part.strip() for part in context_text.split("\n\n") if part.strip()]
-    except ValueError:
-        return core_generate_answer(prompt, [])
+    from core.gemini_client import generate_answer as gemini_generate_answer
 
-    return core_generate_answer(question, context_chunks)
+    return gemini_generate_answer(query, context_chunks)
 
 
 class VectorStoreAdapter:
@@ -75,16 +83,6 @@ MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
 
 MIN_SCORE = 0.0
 NOT_FOUND = "I couldn't find that in the provided documents."
-
-PROMPT_TEMPLATE = """You are a helpful assistant. Answer the question using ONLY the context below.
-If the context does not contain the answer, say "I couldn't find that in the provided documents."
-
-Context:
-{context}
-
-Question: {question}
-
-Answer:"""
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
@@ -158,6 +156,8 @@ def ingest(file: UploadFile = File(...)):
         tmp_path = tmp.name
     try:
         chunks = chunk_pdf(tmp_path)
+    except Exception as exc:
+        raise HTTPException(422, f"Could not read this PDF: {exc}")
     finally:
         os.remove(tmp_path)
     if not chunks:
@@ -251,14 +251,8 @@ def query(req: QueryRequest):
     by_row = {r[0]: r for r in rows}
     ordered = [by_row[i] for i in top if i in by_row]
 
-    context = "\n\n".join(
-        f"[{n}] ({filename}, page {page})\n{text}"
-        for n, (_, page, text, filename) in enumerate(ordered, start=1)
-    )
-    prompt = PROMPT_TEMPLATE.format(context=context, question=question)
-
     try:
-        answer = generate_answer(prompt)
+        answer = generate_answer(question, [text for _, _, text, _ in ordered])
     except Exception as exc:
         raise HTTPException(502, f"Language model failed: {exc}")
 

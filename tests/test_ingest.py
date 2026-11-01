@@ -63,3 +63,11 @@ def test_survives_restart(client):
     main.store.matrix = np.empty((0, main.DIM), dtype=np.float32)  # simulate memory wipe
     with TestClient(main.app):  # startup reloads from SQLite
         assert main.store.size == 2
+
+def test_unreadable_pdf_returns_422(client, monkeypatch):
+    def broken(path):
+        raise ValueError("EOF marker not found")
+    monkeypatch.setattr(main, "chunk_pdf", broken)
+    r = client.post("/ingest", files=pdf())
+    assert r.status_code == 422
+    assert main.store.size == 0

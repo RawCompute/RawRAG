@@ -26,7 +26,7 @@ def client(tmp_path, monkeypatch):
         {"text": "chunk three", "page": 3},
     ])
     monkeypatch.setattr(main, "embed_texts", fake_embed)
-    monkeypatch.setattr(main, "generate_answer", lambda prompt: "ANSWER")
+    monkeypatch.setattr(main, "generate_answer", lambda question, chunks: "ANSWER")
     with TestClient(main.app) as c:
         yield c
 
@@ -59,14 +59,14 @@ def test_top_k_larger_than_index(client):
     assert len(r.json()["sources"]) == 3
 
 
-def test_prompt_contains_context_and_question(client, monkeypatch):
+def test_llm_receives_only_retrieved_chunks(client, monkeypatch):
     seen = {}
-    monkeypatch.setattr(main, "generate_answer", lambda p: seen.update(p=p) or "ok")
+    monkeypatch.setattr(main, "generate_answer",
+                        lambda question, chunks: seen.update(q=question, c=chunks) or "ok")
     ingest(client)
     client.post("/query", json={"question": "what about three", "top_k": 1})
-    assert "chunk three" in seen["p"]
-    assert "what about three" in seen["p"]
-    assert "chunk one" not in seen["p"]
+    assert seen["q"] == "what about three"
+    assert seen["c"] == ["chunk three"]
 
 
 def test_empty_index(client):
@@ -84,7 +84,7 @@ def test_missing_question(client):
 
 
 def test_llm_failure(client, monkeypatch):
-    def boom(prompt): raise RuntimeError("quota")
+    def boom(question, chunks): raise RuntimeError("quota")
     monkeypatch.setattr(main, "generate_answer", boom)
     ingest(client)
     assert client.post("/query", json={"question": "one"}).status_code == 502
