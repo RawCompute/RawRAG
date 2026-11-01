@@ -2,7 +2,7 @@ import os
 
 from dotenv import load_dotenv
 from google import genai
-
+from google.genai import types
 load_dotenv()
 
 _client = None
@@ -17,7 +17,10 @@ def _get_client():
         )
 
     if _client is None:
-        _client = genai.Client(api_key=api_key)
+        _client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=30_000),  # milliseconds
+        )
     return _client
 
 
@@ -83,7 +86,7 @@ def generate_answer(query, context_chunks):
     """
 
     response = _get_client().models.generate_content(
-        model="gemini-3.8-flash",
+        model="gemini-3.6-flash",
         contents=prompt,
     )
 
