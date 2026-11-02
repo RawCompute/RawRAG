@@ -71,7 +71,7 @@ RawRAG/
 - [x] **Gemini API Integration:** Updated to the latest `google-genai` SDK, configured for 3072-dimensional vectors.
 - [x] **Vector Math Engine:** Custom NumPy `VectorDatabase` class built.
 - [x] **SQLite Database (`db/database.py`):** Map NumPy row indices to raw text strings.
-- [ ] **FastAPI Endpoints (`main.py`):** Hook up `/ingest` and `/query` routes.
+- [x] **FastAPI Endpoints (`main.py`):** Hook up `/ingest` and `/query` routes.
 
 ## 📄 License
 
