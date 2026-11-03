@@ -1,7 +1,10 @@
 # fake mode off ho toh yeh work karega to check real chunking, batching 
 # this is optional only but covers one more aspect so good to keep.
+import hashlib
 import sys
 import types
+from pathlib import Path
+
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
@@ -57,6 +60,55 @@ def test_real_chunker_keeps_page_numbers(tmp_path):
     chunks = main.chunk_pdf(str(pdf))
     assert [c["page"] for c in chunks] == [1, 2, 3]
     assert "beta" in chunks[1]["text"]
+
+
+def test_ocr_ingests_and_repairs_unreadable_duplicate(client, fake_gemini):
+    pdf_path = Path(__file__).resolve().parent.parent / "sample.pdf"
+    pdf_data = pdf_path.read_bytes()
+    digest = hashlib.sha256(pdf_data).hexdigest()
+
+    conn = main.connect()
+    try:
+        with conn:
+            cur = conn.execute(
+                "INSERT INTO documents (filename, sha256) VALUES (?, ?)",
+                (pdf_path.name, digest),
+            )
+            conn.execute(
+                "INSERT INTO chunks (doc_id, row_idx, page, text, vector) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    cur.lastrowid,
+                    0,
+                    1,
+                    " ".join(["/i255/1 /2 /3 /4"] * 20),
+                    np.zeros(main.DIM, dtype=np.float32).tobytes(),
+                ),
+            )
+    finally:
+        conn.close()
+    main.store.load(np.zeros((1, main.DIM), dtype=np.float32))
+
+    response = client.post(
+        "/ingest",
+        files={"file": (pdf_path.name, pdf_data, "application/pdf")},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "reingested"
+    assert response.json()["chunks"] > 0
+
+    conn = main.connect()
+    try:
+        rows = conn.execute(
+            "SELECT row_idx, text FROM chunks ORDER BY row_idx"
+        ).fetchall()
+    finally:
+        conn.close()
+    text = " ".join(row[1] for row in rows)
+    assert [row[0] for row in rows] == list(range(len(rows)))
+    assert main._has_readable_text(text)
+    assert "rule value approach" in text.lower()
+    assert main.store.size == len(rows)
 
 
 def test_embed_texts_batches_requests(fake_gemini):

@@ -58,6 +58,55 @@ def test_no_text_extracted(client, monkeypatch):
     assert client.post("/ingest", files=pdf()).status_code == 422
 
 
+def test_rejects_garbled_font_encoding(client, monkeypatch):
+    monkeypatch.setattr(main, "chunk_pdf", lambda path: [
+        {"text": " ".join(["/i255/1 /2 /3 /4"] * 20), "page": 1},
+    ])
+    monkeypatch.setattr(
+        main, "embed_texts",
+        lambda texts: pytest.fail("Garbled PDF text must not be embedded."),
+    )
+
+    response = client.post("/ingest", files=pdf())
+    assert response.status_code == 422
+    assert "OCR could not recover" in response.json()["detail"]
+
+
+def test_reingests_unreadable_duplicate_and_rebuilds_index(client):
+    first = client.post("/ingest", files=pdf())
+    second = client.post(
+        "/ingest",
+        files={"file": ("other.pdf", b"%PDF-1.4 other", "application/pdf")},
+    )
+    assert first.status_code == second.status_code == 200
+    assert main.store.size == 4
+
+    conn = main.connect()
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE chunks SET text = ? WHERE doc_id = ?",
+                (" ".join(["/i255/1 /2 /3 /4"] * 20), first.json()["document_id"]),
+            )
+    finally:
+        conn.close()
+
+    response = client.post("/ingest", files=pdf())
+    assert response.status_code == 200
+    assert response.json()["status"] == "reingested"
+    assert main.store.size == 4
+
+    conn = main.connect()
+    try:
+        rows = conn.execute(
+            "SELECT row_idx, text FROM chunks ORDER BY row_idx"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert [row[0] for row in rows] == list(range(4))
+    assert all(main._has_readable_text(row[1]) for row in rows)
+
+
 def test_survives_restart(client):
     client.post("/ingest", files=pdf())
     main.store.matrix = np.empty((0, main.DIM), dtype=np.float32)  # simulate memory wipe

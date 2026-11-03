@@ -30,13 +30,10 @@ def chunk_pdf(path: str) -> list[dict]:
         return [{"text": "fake chunk one", "page": 1},
                 {"text": "fake chunk two", "page": 2}]
 
-    import PyPDF2
-    from core.chunker import chunk_text
+    from core.chunker import chunk_text, extract_pages_from_pdf
 
     chunks = []
-    reader = PyPDF2.PdfReader(path)
-    for page_number, page in enumerate(reader.pages, start=1):
-        page_text = (page.extract_text() or "").replace("\n", " ")
+    for page_number, page_text in extract_pages_from_pdf(path):
         for piece in chunk_text(page_text):
             chunks.append({"text": piece, "page": page_number})
     return chunks
@@ -52,6 +49,12 @@ def embed_texts(texts: list[str]) -> np.ndarray:
     for i in range(0, len(texts), EMBED_BATCH):
         vectors.extend(get_embeddings(texts[i:i + EMBED_BATCH]))
     return np.array(vectors, dtype=np.float32)
+
+
+def _has_readable_text(text: str) -> bool:
+    from core.chunker import has_readable_text
+
+    return has_readable_text(text)
 
 
 def generate_answer(query: str, context_chunks: list[str]) -> str:
@@ -145,11 +148,17 @@ def ingest(file: UploadFile = File(...)):
         existing = conn.execute(
             "SELECT id FROM documents WHERE sha256 = ?", (digest,)
         ).fetchone()
+        if existing:
+            stored_texts = conn.execute(
+                "SELECT text FROM chunks WHERE doc_id = ?", (existing[0],)
+            ).fetchall()
+            if stored_texts and _has_readable_text(
+                " ".join(row[0] for row in stored_texts)
+            ):
+                return {"status": "already_ingested", "document_id": existing[0],
+                        "filename": file.filename}
     finally:
         conn.close()
-    if existing:
-        return {"status": "already_ingested", "document_id": existing[0],
-                "filename": file.filename}
 
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(data)
@@ -161,7 +170,15 @@ def ingest(file: UploadFile = File(...)):
     finally:
         os.remove(tmp_path)
     if not chunks:
-        raise HTTPException(422, "No extractable text found (is this a scanned PDF?).")
+        raise HTTPException(
+            422, "No readable text could be extracted from this PDF, even after OCR."
+        )
+    if not _has_readable_text(" ".join(c["text"] for c in chunks)):
+        raise HTTPException(
+            422,
+            "The PDF text could not be decoded, and OCR could not recover readable "
+            "text. Check the scan quality and try a clearer PDF.",
+        )
 
     try:
         vectors = np.asarray(embed_texts([c["text"] for c in chunks]), dtype=np.float32)
@@ -175,6 +192,7 @@ def ingest(file: UploadFile = File(...)):
     norms = np.linalg.norm(vectors, axis=1, keepdims=True)
     vectors = vectors / np.clip(norms, 1e-12, None)
 
+    reingested = False
     with write_lock:
         conn = connect()
         try:
@@ -182,30 +200,67 @@ def ingest(file: UploadFile = File(...)):
                 "SELECT id FROM documents WHERE sha256 = ?", (digest,)
             ).fetchone()
             if existing:
-                return {"status": "already_ingested", "document_id": existing[0],
-                        "filename": file.filename}
+                doc_id = existing[0]
+                stored_texts = conn.execute(
+                    "SELECT text FROM chunks WHERE doc_id = ?", (doc_id,)
+                ).fetchall()
+                if stored_texts and _has_readable_text(
+                    " ".join(row[0] for row in stored_texts)
+                ):
+                    return {"status": "already_ingested", "document_id": doc_id,
+                            "filename": file.filename}
 
-            start = store.size
-            with conn:
-                cur = conn.execute(
-                    "INSERT INTO documents (filename, sha256) VALUES (?, ?)",
-                    (file.filename, digest),
-                )
-                doc_id = cur.lastrowid
-                conn.executemany(
-                    "INSERT INTO chunks (doc_id, row_idx, page, text, vector) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    [
-                        (doc_id, start + i, c.get("page"), c["text"], vectors[i].tobytes())
-                        for i, c in enumerate(chunks)
-                    ],
-                )
+                remaining = conn.execute(
+                    "SELECT id FROM chunks WHERE doc_id != ? ORDER BY row_idx",
+                    (doc_id,),
+                ).fetchall()
+                with conn:
+                    conn.execute("DELETE FROM chunks WHERE doc_id = ?", (doc_id,))
+                    conn.execute("UPDATE chunks SET row_idx = -id")
+                    conn.executemany(
+                        "UPDATE chunks SET row_idx = ? WHERE id = ?",
+                        [(index, row[0]) for index, row in enumerate(remaining)],
+                    )
+                    conn.executemany(
+                        "INSERT INTO chunks (doc_id, row_idx, page, text, vector) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        [
+                            (doc_id, len(remaining) + i, c.get("page"), c["text"],
+                             vectors[i].tobytes())
+                            for i, c in enumerate(chunks)
+                        ],
+                    )
+                rows = conn.execute(
+                    "SELECT vector FROM chunks ORDER BY row_idx"
+                ).fetchall()
+                store.load(np.vstack([
+                    np.frombuffer(row[0], dtype=np.float32) for row in rows
+                ]))
+                reingested = True
+            else:
+                start = store.size
+                with conn:
+                    cur = conn.execute(
+                        "INSERT INTO documents (filename, sha256) VALUES (?, ?)",
+                        (file.filename, digest),
+                    )
+                    doc_id = cur.lastrowid
+                    conn.executemany(
+                        "INSERT INTO chunks (doc_id, row_idx, page, text, vector) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        [
+                            (doc_id, start + i, c.get("page"), c["text"],
+                             vectors[i].tobytes())
+                            for i, c in enumerate(chunks)
+                        ],
+                    )
+                store.add(vectors)
         finally:
             conn.close()
-        store.add(vectors)
 
     pages = {c.get("page") for c in chunks if c.get("page") is not None}
-    return {"status": "ingested", "document_id": doc_id, "filename": file.filename,
+    status = "reingested" if reingested else "ingested"
+    return {"status": status, "document_id": doc_id, "filename": file.filename,
             "pages": len(pages), "chunks": len(chunks)}
 
 
@@ -250,6 +305,13 @@ def query(req: QueryRequest):
         conn.close()
     by_row = {r[0]: r for r in rows}
     ordered = [by_row[i] for i in top if i in by_row]
+    ordered = [row for row in ordered if _has_readable_text(row[2])]
+    if not ordered:
+        raise HTTPException(
+            422,
+            "The retrieved PDF text is unreadable. Convert the PDF to a searchable "
+            "PDF using OCR, then re-ingest it.",
+        )
 
     try:
         answer = generate_answer(question, [text for _, _, text, _ in ordered])

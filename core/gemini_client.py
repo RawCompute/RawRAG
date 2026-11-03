@@ -6,6 +6,8 @@ from google.genai import types
 load_dotenv()
 
 _client = None
+ANSWER_MODEL = "gemini-3.5-flash-lite"
+ANSWER_MAX_OUTPUT_TOKENS = 1024
 
 
 def _get_client():
@@ -25,11 +27,19 @@ def _get_client():
 
 
 def _extract_text(response):
+    candidates = getattr(response, "candidates", None) or []
+    for candidate in candidates:
+        finish_reason = getattr(candidate, "finish_reason", None)
+        if getattr(finish_reason, "value", finish_reason) == "MAX_TOKENS":
+            raise ValueError(
+                "Gemini truncated the answer at its output-token limit. "
+                "Try asking a more specific question."
+            )
+
     text = getattr(response, "text", None)
     if text:
         return text
 
-    candidates = getattr(response, "candidates", None) or []
     for candidate in candidates:
         content = getattr(candidate, "content", None)
         parts = getattr(content, "parts", None) or []
@@ -78,6 +88,7 @@ def generate_answer(query, context_chunks):
     prompt = f"""
     Answer the following query using strictly the context provided below.
     If the context does not contain the answer, clearly state that you do not have enough information.
+    Respond in 1-3 complete sentences. Do not end mid-sentence or with an ellipsis.
 
     Context:
     {context_string}
@@ -88,6 +99,12 @@ def generate_answer(query, context_chunks):
     response = _get_client().models.generate_content(
         model="gemini-3.6-flash",
         contents=prompt,
+        config=genai.types.GenerateContentConfig(
+            max_output_tokens=ANSWER_MAX_OUTPUT_TOKENS,
+            thinking_config=genai.types.ThinkingConfig(
+                thinking_level=genai.types.ThinkingLevel.LOW
+            ),
+        ),
     )
 
     return _extract_text(response)

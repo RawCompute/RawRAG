@@ -74,6 +74,23 @@ def test_empty_index(client):
     assert r.status_code == 409
 
 
+def test_rejects_unreadable_stored_chunks(client):
+    ingest(client)
+    conn = main.connect()
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE chunks SET text = ?",
+                (" ".join(["/i255/1 /2 /3 /4"] * 20),),
+            )
+    finally:
+        conn.close()
+
+    response = client.post("/query", json={"question": "what is this about?"})
+    assert response.status_code == 422
+    assert "retrieved PDF text is unreadable" in response.json()["detail"]
+
+
 def test_blank_question(client):
     ingest(client)
     assert client.post("/query", json={"question": "   "}).status_code == 400
