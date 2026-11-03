@@ -3,7 +3,7 @@ import requests
 
 API_URL = "http://127.0.0.1:8000"
 
-st.set_page_config(page_title="RawRAG UI", layout="centered")
+st.set_page_config(page_title="RawRAG Pipeline", layout="centered")
 st.title("RawRAG")
 
 st.sidebar.header("Document Ingestion")
