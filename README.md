@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
-[![Google Gemini](https://img.shields.io/badge/Model-Gemini%202.5%20Flash-orange)](#)
+[![Google Gemini](https://img.shields.io/badge/Model-Gemini%203.5%20Flash--Lite-orange)](#)
 
 **RawRAG** is a production-grade Retrieval-Augmented Generation (RAG) pipeline built from scratch under the **[RawCompute]** organization. 
 
@@ -12,10 +12,13 @@
 
 RawRAG is designed to process massive PDFs, chunk them intelligently, embed them into high-dimensional space, and retrieve exact context via manual cosine similarity calculations.
 
-1. **Ingestion & Chunking:** Extracts text from PDFs using `PyPDF2` and slices it using a custom sliding-window algorithm to preserve semantic boundaries.
+1. **Ingestion & Chunking:** Extracts text from PDFs using `PyPDF2`, automatically OCRs scanned or garbled pages locally, and slices the text using a custom sliding-window algorithm.
 2. **Embeddings:** Pings the `gemini-embedding-001` endpoint via the modern `google-genai` SDK to convert text chunks into 3072-dimensional floating-point vectors.
 3. **Vector Mathematics:** Maintains a global NumPy matrix (`np.vstack`) and executes manual dot-product cosine similarity searches (`np.argsort`) to find the top-k matches instantly.
-4. **LLM Synthesis:** Injects retrieved chunk text into a strict prompt template and generates grounded answers using `gemini-2.5-flash`.
+4. **LLM Synthesis:** Injects retrieved chunk text into a strict prompt template and generates grounded answers using the low-latency `gemini-3.5-flash-lite`.
+
+PDFs with scanned pages or unsupported font encodings are automatically
+processed with local OCR during ingestion.
 
 ## 📂 Repository Structure
 
