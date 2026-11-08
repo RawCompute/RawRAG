@@ -8,7 +8,7 @@
 
 **Design Philosophy:** Zero bloated orchestration wrappers (no LangChain, no LlamaIndex) and zero managed vector databases (no Pinecone, no ChromaDB). The infrastructure is built from first principles using pure Python, linear algebra via NumPy, and standard SQLite.
 
-## Technical Architecture
+## Architecture Overview
 
 RawRAG is designed to process complex documents, embed them into high-dimensional space, and retrieve context via manual mathematical operations.
 
@@ -71,20 +71,13 @@ GEMINI_API_KEY=your_api_key_here
 
 ## Running the Application
 
-RawRAG operates with a decoupled backend and frontend. You will need two concurrent terminal sessions.
+## Development Roadmap
 
-**1. Start the FastAPI Backend:**
-```bash
-uv run uvicorn main:app --host 127.0.0.1 --port 8000 --reload --timeout-keep-alive 5
-```
-*API documentation and manual testing available at `http://127.0.0.1:8000/docs`.*
-
-**2. Start the Streamlit Frontend:**
-Open a new terminal window, ensure the virtual environment is active, and launch the UI:
-```bash
-uv run streamlit run app.py
-```
-*The interactive web interface will launch at `http://localhost:8501`.*
+- [x] **Sliding-Window Chunker:** Completed and tested on complex PDFs.
+- [x] **Gemini API Integration:** Updated to the latest `google-genai` SDK, configured for 3072-dimensional vectors.
+- [x] **Vector Math Engine:** Custom NumPy `VectorDatabase` class built.
+- [x] **SQLite Database (`db/database.py`):** Map NumPy row indices to raw text strings.
+- [x] **FastAPI Endpoints (`main.py`):** Hook up `/ingest` and `/query` routes.
 
 ## License
 
