@@ -1,5 +1,0 @@
-Review insert_chunks function from databse.py
-
-
-$response = Invoke-RestMethod -Uri "http://localhost:8000/query" -Method POST -ContentType "application/json" -Body '{"question": "What is the main topic of this document?", "top_k": 3}' -TimeoutSec 60
-$response.answer
