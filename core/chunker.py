@@ -106,15 +106,3 @@ def chunk_text(text, chunk_size=500, overlap=50):
         if i + chunk_size >= len(words):
             break
     return chunks
-
-    
-
-'''Following functions are for testing purposes only. They will be removed in the final version.
-                                                                                        ~ Prabal
-'''
-if __name__ == "__main__":
-    text = extract_text_from_pdf("sample.pdf")
-    chunks = chunk_text(text)
-
-    print(f"Total chunks created: {len(chunks)}")
-    print(f"Preview Chunk 1: {chunks[0][:100]}...")

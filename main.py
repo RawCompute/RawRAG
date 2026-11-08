@@ -16,20 +16,11 @@ load_dotenv()
 DIM = 3072  # every Gemini embedding has 3072 numbers
 EMBED_BATCH = 50  # chunks sent to Gemini per request
 
-
-def is_fake() -> bool:
-    return os.getenv("RAWRAG_FAKE") == "1"
-
-
 # The three functions below connect main.py to core/. With RAWRAG_FAKE=1 they
 # return fake data, so you can test without a Gemini key.
 # The core imports are inside the functions so that fake mode (and the tests)
 # work even when GEMINI_API_KEY is not set.
 def chunk_pdf(path: str) -> list[dict]:
-    if is_fake():
-        return [{"text": "fake chunk one", "page": 1},
-                {"text": "fake chunk two", "page": 2}]
-
     from core.chunker import chunk_text, extract_pages_from_pdf
 
     chunks = []
@@ -40,9 +31,6 @@ def chunk_pdf(path: str) -> list[dict]:
 
 
 def embed_texts(texts: list[str]) -> np.ndarray:
-    if is_fake():
-        return np.random.rand(len(texts), DIM)
-
     from core.gemini_client import get_embeddings
 
     vectors = []
@@ -58,9 +46,6 @@ def _has_readable_text(text: str) -> bool:
 
 
 def generate_answer(query: str, context_chunks: list[str]) -> str:
-    if is_fake():
-        return "FAKE ANSWER (no LLM was called)."
-
     from core.gemini_client import generate_answer as gemini_generate_answer
 
     return gemini_generate_answer(query, context_chunks)
